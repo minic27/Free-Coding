@@ -1,0 +1,155 @@
+import decimal
+from typing import NamedTuple
+from decimal import *
+import re
+
+
+class Token(NamedTuple):
+    type: str
+    tok: str
+    line: int
+    column: int
+    callError: str
+
+#MAIN FUNCTION#
+def run(code):
+    keywords= {'Alpha', 'Omega', 'Break', 'Clear', 'Go', 'Come',                       #reserveWords
+                'If', 'Else', 'Elif', 'Switch', 'For', 'Cast', 'Default',
+                'While', 'Do', 'Return', 'Key', 'Function', 'Struct', 'Empty',
+                'Int', 'Float', 'Char', 'Stng', 'Bool','Var',}                             
+    
+    logical = {'And', 'Or', 'Not'}
+    boolean = {'true', 'false'}
+    token_specification = [                     #bale, eto may order yan 
+        ('COMMENT', r'\#[\s\S]*'),          #notwhitespace|whitespace
+        ('POS_NUMBER', r'(\d+(\.\d+)?)|(\d?(\.\d+)+)'),     #\d (digits)
+        ('NEG_NUMBER', r'(\-\d+(\.\d+)?)|\-(\d?(\.\d+)+)'),
+        ('RELATIONAL', r'([<][=]|[>][=]|[!][=]|[<]|[>]|[=][=])'), #specify
+        ('ASSIGNMENT',   r'\=|(\-\=)|(\+\=)|(\*\=)|(\/\=)|(\*\*\=)|(\%\=)|(\/\/\=)|(\&\=)|(\|\=)|(\^\=)'),
+        ('UNARY', r'([+][+]|[-][-])'),  #updated         
+        ('ARITHMETIC', r'\+|\-|(\/\/)|(\*\*)|\*|\/|\%'),
+        ('LIT_STRING', r'\"([ \S]*?\w.)\"|\"\\\"([ \S]*?\\\"\")'),
+        ('LIT_CHAR', r'\'([ \S]*?\w.?)'), #need pa ayusin
+        ('SYMBOLS', r'\(|\)|\{|\}|\[|\]|\,|\;|\:'), 
+        ('ESCAPESEQ', r'\\n|\\t|\\b|\\r|\\\\'),    
+        ('SPECIALQ', r'(\\\\)|(\\)|(\!)|(\~)|(\$)|(\^)|(\&)|(\_)|(\.)'),    
+        ('NON_KEY', r'(a(?:lpha)|v(?:ar)|o(?:mega)|i(?:nt)|f(?:loat)|c(?:har)|s(?:tng)|b(?:ool)|b(?:reak)|c(?:lear)|g(?:o)|c(?:ome)|i(?:f)|e(?:lse)|e(?:lif)|s(?:witch)|f(?:or)|c(?:ast)|d(?:efault)|w(?:hile)|d(?:o)|r(?:eturn)|k(?:ey)|f(?:unction)|s(?:truct)|e(?:mpty))[^\s]?'),
+        ('STRUCT_IDENT', r'[a-z]\w*\.[a-z]\w*'), 
+        ('IDENT', r'[a-z][\w]*|[a-z][\w]*[\d]*'),   
+        ('RESERVED_WORD', r'[A-Z][\w\.]*'),
+        ('LIT_BOOL', r'[t][r][u][e]|[f][a][l][s][e]'),        
+        ('TAB', r'[\t]+'), 
+        ('SPACE', r'[ ]+'), 
+        ('NEWLINE', r'[\n]+'),
+        ('ERROR', r'[^\s]+'),
+
+      
+    ]
+    datatype = {'Int','Bool','Stng','Float','Char'}
+    token_data = []
+    tok_regex = '|'.join('(?P<%s>%s)' % pair for pair in token_specification)
+    line_num = 1
+    line_start = 0
+    for mo in re.finditer(tok_regex, code):
+        kind = mo.lastgroup
+        tok = mo.group()
+        column = mo.start() - line_start
+        callError = ""
+        if kind == 'ERROR':
+            if str(tok)[0] == "\"" or str(tok)[-1] == "\"":
+                callError = "Invalid quotation mark"
+            else:
+                callError = "Invalid character/symbol"
+        elif kind == 'SYMBOLS':
+            kind = tok
+        elif kind == 'IDENT' and len(tok) > 15:
+            value_exceed = len(tok) - 15
+            callError = "Identifier exceeded maximum values by " + str(value_exceed) + " characters"
+            kind = 'ERROR'
+        elif kind == 'STRUCT_IDENT':
+            check_structid = str(tok).split('.', 1)
+            check_id1 = check_structid[0]
+            check_id2 = check_structid[1]
+            if(len(check_id1) > 15) or (len(check_id2) > 15):
+                callError = True
+                kind = 'ERROR'
+        elif kind == 'NON_KEY':
+            callError = "Reserved word cannot be used as an identifier"
+            kind = 'ERROR'
+        elif kind == 'RESERVED_WORD' and tok in keywords:
+            kind = tok
+        elif kind == 'RESERVED_WORD' and tok in datatype:
+            kind = tok
+        elif kind == 'RESERVED_WORD' and tok in logical:
+            kind = "LIT_LOGICAL"
+        elif kind == 'RESERVED_WORD' and tok in boolean:
+            kind = "LIT_BOOLEAN"
+        elif kind == 'RESERVED_WORD':
+            callError = "The reserved word does not exist"
+            kind = 'ERROR'
+        #elif kind == 'POS_NUMBER':
+        elif kind == 'POS_NUMBER':
+            tok = float(tok) if '.' in tok else int(tok)
+            if (isinstance(tok, int) == True):
+                if tok < 1000000000:
+                    kind = "LIT_INTPOS"
+                else:
+                    callError = "Exceeded number of digits allowed"
+                    kind = 'ERROR'
+            else:
+                check_decimal = str(tok).split('.',1)
+                digit_place = str(check_decimal[0])
+                decimal_place = str(check_decimal[1])
+                if (len(digit_place) < 10) and (len(decimal_place) < 6):
+                    kind = "LIT_DECPOS"
+                else:
+                    callError = "Exceeded number of digits allowed"
+                    kind = 'ERROR'
+        #elif kind == 'NEG_NUMBER':
+        elif kind == 'POS_NUMBER':      #for some reason nagana ito
+            tok = float(tok) if '.' in tok else int(tok)
+            if (isinstance(tok, int) == True):
+                if tok < -1000000000:
+                    kind = "LIT_INTNEG"
+                else:
+                    callError = "Exceeded number of digits allowed"
+                    kind = 'ERROR'
+            else:
+                check_decimal = str(tok).split('.',1)
+                digit_place = str(check_decimal[0])
+                decimal_place = str(check_decimal[1])
+                if (len(digit_place) < 10) and (len(decimal_place) < 6):
+                    kind = "LIT_DECNEG"
+                else:
+                    callError = "Exceeded number of digits allowed"
+                    kind = 'ERROR'
+        elif kind == 'NEWLINE':
+            tok = "\\n"
+            line_start = mo.end()
+            line_num += 1
+        elif kind == 'SPACE':
+            tok = kind
+        elif kind == 'TAB':
+            tok = "\\t"
+
+
+        if kind == 'ERROR' and tok == "":
+            continue
+        elif kind == 'ERROR' and len(token_data) > 0 and tok != "" and not(token_data[-1].type == 'SPACE' or token_data[-1].tok == "\\n" or token_data[-1].tok == "\\t"):
+            hold_value = str(token_data[-1].tok)
+            token_data = token_data[:-1]
+            tok = hold_value + str(tok)
+        else:
+            None
+        token_data.append(Token(kind,tok,line_num,column,callError))
+        callError = ""
+    return token_data
+        
+ 
+statements = '''Struct'''
+
+for type in run(statements): 
+    print(type)
+        
+
+       
